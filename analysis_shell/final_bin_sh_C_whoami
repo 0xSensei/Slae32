@@ -1,0 +1,111 @@
+
+
+
+
+
+
+; meta exec /bin/sh -c whoami
+
+;title : Shellcode analysis
+
+:Subject
+	for this assigment i took:
+	* linux/x86/shell_reverse_tcp lhost=127.0.0.1 lport=443
+	* linux/x86/read_file	file=/etc/passwd
+	* linux/x86/exec	cmd=whoami	
+
+
+i will use ndisasm for disasammbleing and i will make sure there will be comments on each instruction. and gdb to debug for further analysis.
+
+
+
+**linux/x86/exec
+i generated the shellcode using msfvenom, and used ndisasm.
+---msfvenom -p linux/x86/read_file | ndisasm -u -
+ 
+
+
+
+
+
+
+
+
+
+00000000  6A0B              push byte +0xb ; syscall for execve
+00000002  58                pop eax ; eax now have the syscall number
+00000003  99                cdq		;extends the sign of eax into edx
+00000004  52                push edx	; push edx which is 0 into the stack
+00000005  66682D63          push word 0x632d	;	"-c" which is argument for /bin/sh 
+00000009  89E7              mov edi,esp
+0000000B  682F736800        push dword 0x68732f		;/sh , since we pushed 3 byte the fourth byte will be 0
+00000010  682F62696E        push dword 0x6e69622f	;/bin
+00000015  89E3              mov ebx,esp			][][[[];ebx will have the address to "/bin/bash"
+00000017  52                push edx			; push 0][]
+00000018  E807000000        call dword 0x24		;call relative address, this will change how we read the assembly.
+0000001D  7768              ja 0x87			; 
+0000001F  6F                outsd
+00000020  61                popad
+00000021  6D                insd
+00000022  6900575389E1      imul eax,[eax],dword 0xe1895357
+00000028  CD80              int 0x80
+
+this how it will be.
+
+00000000  6A0B              push byte +0xb ; syscall for execve
+00000002  58                pop eax ; eax now have the syscall number
+00000003  99                cdq		;extends the sign of eax into edx
+00000004  52                push edx	; push edx which is 0 into the stack
+00000005  66682D63          push word 0x632d	;	"-c" which is argument for /bin/sh 
+00000009  89E7              mov edi,esp
+0000000B  682F736800        push dword 0x68732f		;/sh , since we pushed 3 byte the fourth byte will be 0
+00000010  682F62696E        push dword 0x6e69622f	;/bin
+00000015  89E3              mov ebx,esp			][][[[];ebx will have the address to "/bin/bash"
+00000017  52                push edx			; push 0][]
+00000018  E807000000        call dword 0x24		;call relative address, and push the next interction address into the stack which is an address to 0x77686f616d6900 -- which a technique used by metasploit to get an address to 'whoami'
+00000019  57                push edi	; will push an address of "-c" into the stack
+00000020  53                push ebx	; will push an adderss of "/bin/bash" into the stack
+00000021  89E1              mov ecx,esp	; ecx will be the address 
+00000023  CD80              int 0x80
+
+
+before syscall
+[----------------------------------registers-----------------------------------]
+EAX: 0xb ('\x0b')
+EBX: 0xbffff27e ("/bin/sh")
+ECX: 0xbffff26e --> 0xbffff27e ("/bin/sh")
+EDX: 0x0 
+ESI: 0x0 
+EDI: 0xbffff286 --> 0x632d ('-c')
+EBP: 0xbffff2c8 --> 0x0 
+ESP: 0xbffff26e --> 0xbffff27e ("/bin/sh")
+EIP: 0x804a068 --> 0x80cd
+EFLAGS: 0x286 (carry PARITY adjust zero SIGN trap INTERRUPT direction overflow)
+[-------------------------------------code-------------------------------------]
+   0x804a060 <code+32>:	popa   
+   0x804a061 <code+33>:	ins    DWORD PTR es:[edi],dx
+   0x804a062 <code+34>:	imul   eax,DWORD PTR [eax],0xe1895357
+=> 0x804a068 <code+40>:	int    0x80
+   0x804a06a <code+42>:	add    BYTE PTR [eax],al
+   0x804a06c <completed.6159>:	add    BYTE PTR [eax],al
+   0x804a06e:	add    BYTE PTR [eax],al
+   0x804a070 <dtor_idx.6161>:	add    BYTE PTR [eax],al
+[------------------------------------stack-------------------------------------]
+0000| 0xbffff26e --> 0xbffff27e ("/bin/sh")
+0004| 0xbffff272 --> 0xbffff286 --> 0x632d ('-c')
+0008| 0xbffff276 --> 0x804a05d ("whoami")
+0012| 0xbffff27a --> 0x0 
+0016| 0xbffff27e ("/bin/sh")
+0020| 0xbffff282 --> 0x68732f ('/sh')
+0024| 0xbffff286 --> 0x632d ('-c')
+0028| 0xbffff28a --> 0x84300000 
+[------------------------------------------------------------------------------]
+Legend: code, data, rodata, value
+0x0804a068 in code ()
+gdb-peda$ 
+
+
+
+
+
+

